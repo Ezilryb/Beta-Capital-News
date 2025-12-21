@@ -1,83 +1,113 @@
 import discord
 from discord.ext import commands, tasks
+import aiohttp
+import json
+from datetime import datetime
 import os
-import requests
 from dotenv import load_dotenv
-import asyncio
 
 load_dotenv()
 
 TOKEN = os.getenv('DISCORD_TOKEN')
 NEWSAPI_KEY = os.getenv('NEWSAPI_KEY')
 
-# IDs des channels (remplacez par les vôtres)
-CHANNELS = {
-    'crypto_nfts': 123456789012345678,  # Exemple d'ID
-    'devises': 123456789012345678,
-    'indices': 123456789012345678,
-    'etf': 123456789012345678,
-    'actions': 123456789012345678,
-    'matieres_premieres': 123456789012345678,
-    'autres': 123456789012345678
-}
+CATEGORIES = ['CryptoNFTs', 'devise', 'Indice', 'etf', 'Actions', 'MatierePremiere', 'tous le reste']
 
-# Mots-clés pour catégorisation
 KEYWORDS = {
-    'crypto_nfts': ['crypto', 'bitcoin', 'ethereum', 'nft', 'blockchain'],
-    'devises': ['forex', 'dollar', 'euro', 'yen', 'currency', 'exchange rate'],
-    'indices': ['dow jones', 's&p 500', 'nasdaq', 'index', 'cac 40'],
+    'CryptoNFTs': ['crypto', 'bitcoin', 'ethereum', 'nft', 'blockchain', 'defi', 'hack', 'regulation', 'launch'],
+    'devise': ['forex', 'currency', 'exchange rate', 'usd', 'eur', 'yen', 'gbp'],
+    'Indice': ['index', 's&p', 'nasdaq', 'dow jones', 'ftse', 'nikkei'],
     'etf': ['etf', 'exchange traded fund'],
-    'actions': ['stock', 'share', 'equity', 'apple', 'tesla', 'market cap'],
-    'matieres_premieres': ['commodity', 'oil', 'gold', 'silver', 'wheat', 'energy']
+    'Actions': ['stock', 'share', 'equity', 'ipo', 'earnings', 'dividend'],
+    'MatierePremiere': ['commodity', 'oil', 'gold', 'silver', 'crude', 'wheat', 'copper']
 }
 
-intents = discord.Intents.default()
-intents.message_content = True
-intents.members = True  # Si besoin pour rôles
+CHANNELS_FILE = 'channels.json'
+LAST_NEWS_FILE = 'last_news.json'
 
-bot = commands.Bot(command_prefix='!', intents=intents)
+bot = commands.Bot(command_prefix='!', intents=discord.Intents.default())
+
+def load_channels():
+    if os.path.exists(CHANNELS_FILE):
+        with open(CHANNELS_FILE, 'r') as f:
+            return json.load(f)
+    return {}
+
+def save_channels(channels):
+    with open(CHANNELS_FILE, 'w') as f:
+        json.dump(channels, f)
+
+def load_last():
+    if os.path.exists(LAST_NEWS_FILE):
+        with open(LAST_NEWS_FILE, 'r') as f:
+            return json.load(f)
+    return {cat: '2000-01-01T00:00:00Z' for cat in CATEGORIES}
+
+def save_last(last_times):
+    with open(LAST_NEWS_FILE, 'w') as f:
+        json.dump(last_times, f)
 
 @bot.event
 async def on_ready():
-    print(f'Bot connecté en tant que {bot.user}')
-    fetch_news.start()  # Démarre la tâche périodique
+    global CHANNELS
+    CHANNELS = load_channels()
+    fetch_news.start()
+    print(f'{bot.user} has connected to Discord!')
 
-@tasks.loop(minutes=10)  # Polling toutes les 10 minutes
+@tasks.loop(minutes=10)
 async def fetch_news():
-    url = f'https://newsapi.org/v2/everything?q=economy+OR+finance+OR+crypto&apiKey={NEWSAPI_KEY}&language=fr'  # Focus sur news économiques, en français si possible
-    response = requests.get(url)
-    if response.status_code == 200:
-        articles = response.json()['articles'][:5]  # Limite à 5 pour éviter spam
-        for article in articles:
-            title = article['title'].lower()
-            description = article['description'].lower() if article['description'] else ''
-            content = title + ' ' + description
-            category = 'autres'  # Par défaut
-            for cat, keys in KEYWORDS.items():
-                if any(key in content for key in keys):
-                    category = cat
-                    break
-            channel_id = CHANNELS.get(category)
-            if channel_id:
-                channel = bot.get_channel(channel_id)
-                if channel:
-                    embed = discord.Embed(title=article['title'], description=article['description'], url=article['url'])
-                    embed.set_thumbnail(url=article['urlToImage'] if article['urlToImage'] else '')
-                    await channel.send(embed=embed)
-    else:
-        print('Erreur API NewsAPI')
+    url = f'https://newsapi.org/v2/everything?q=economy OR finance OR business OR stock OR crypto OR commodity OR etf OR regulation OR hack&domains=coindesk.com,cointelegraph.com,wsj.com,cnbc.com,bloomberg.com,reuters.com&sortBy=publishedAt&apiKey={NEWSAPI_KEY}&pageSize=20&language=en'
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as resp:
+            if resp.status != 200:
+                print(f'Error fetching news: {resp.status}')
+                return
+            data = await resp.json()
+            articles = data.get('articles', [])
+    
+    last_times = load_last()
+    new_last = last_times.copy()
+    
+    for article in articles:
+        pub_time_str = article['publishedAt']
+        try:
+            pub_time = datetime.fromisoformat(pub_time_str.replace('Z', '+00:00'))
+        except ValueError:
+            continue  # Skip invalid dates
+        
+        text = ((article.get('title', '') + ' ' + article.get('description', '') + ' ' + article.get('content', ''))).lower()
+        
+        matching_cats = [cat for cat, kws in KEYWORDS.items() if any(kw.lower() in text for kw in kws)]
+        if not matching_cats:
+            matching_cats = ['tous le reste']
+        
+        for cat in matching_cats:
+            last_time_str = last_times.get(cat, '2000-01-01T00:00:00Z')
+            try:
+                last_time = datetime.fromisoformat(last_time_str.replace('Z', '+00:00'))
+            except ValueError:
+                last_time = datetime(2000, 1, 1, tzinfo=datetime.now().tzinfo)
+            
+            if pub_time > last_time:
+                if cat in CHANNELS:
+                    channel = bot.get_channel(CHANNELS[cat])
+                    if channel:
+                        embed = discord.Embed(title=article.get('title', 'No Title'), description=article.get('description', 'No Description'), url=article.get('url'))
+                        embed.set_author(name=article['source'].get('name', 'Unknown Source'))
+                        embed.set_footer(text=pub_time_str)
+                        await channel.send(embed=embed)
+                new_last[cat] = max(new_last.get(cat, '2000-01-01T00:00:00Z'), pub_time_str)
+    
+    save_last(new_last)
 
-# Commande exemple pour abonnement (optionnel : assigne rôle)
-@bot.command(name='subscribe')
-async def subscribe(ctx, category: str):
-    if category in CHANNELS:
-        role_name = f'Sub_{category}'
-        role = discord.utils.get(ctx.guild.roles, name=role_name)
-        if not role:
-            role = await ctx.guild.create_role(name=role_name)
-        await ctx.author.add_roles(role)
-        await ctx.send(f'Vous êtes abonné à {category}!')
-    else:
-        await ctx.send('Catégorie invalide.')
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def setchannel(ctx, category: str, channel: discord.TextChannel):
+    if category not in CATEGORIES:
+        await ctx.send(f'Catégorie "{category}" non trouvée. Disponibles : {", ".join(CATEGORIES)}')
+        return
+    CHANNELS[category] = channel.id
+    save_channels(CHANNELS)
+    await ctx.send(f'Catégorie "{category}" définie sur {channel.mention}')
 
 bot.run(TOKEN)
