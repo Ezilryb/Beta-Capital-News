@@ -11,7 +11,18 @@ load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
 NEWSAPI_KEY = os.getenv('NEWSAPI_KEY')
 
-CATEGORIES = ['CryptoNFTs', 'devise', 'Indice', 'etf', 'Actions', 'MatierePremiere', 'tous le reste']
+# Mapping fixe des catégories vers les IDs de channels (à ne pas changer sauf si tu veux modifier)
+CHANNEL_IDS = {
+    'CryptoNFTs': 1452339946558980409,
+    'devise': 1452340005895802910,
+    'Indice': 1452340116117782622,
+    'etf': 1452340158140649757,
+    'Actions': 1452340198535991516,
+    'MatierePremiere': 1452340245680095414,
+    'tous le reste': 1452340245680095414  # Par défaut, on peut utiliser le même que MatierePremiere ou un autre
+}
+
+CATEGORIES = list(CHANNEL_IDS.keys())
 
 KEYWORDS = {
     'CryptoNFTs': ['crypto', 'bitcoin', 'ethereum', 'nft', 'blockchain', 'defi', 'hack', 'regulation', 'launch'],
@@ -22,20 +33,12 @@ KEYWORDS = {
     'MatierePremiere': ['commodity', 'oil', 'gold', 'silver', 'crude', 'wheat', 'copper']
 }
 
-CHANNELS_FILE = 'channels.json'
 LAST_NEWS_FILE = 'last_news.json'
 
-bot = commands.Bot(command_prefix='!', intents=discord.Intents.default())
+intents = discord.Intents.default()
+intents.message_content = True  # Pour les commandes si tu en ajoutes plus tard
 
-def load_channels():
-    if os.path.exists(CHANNELS_FILE):
-        with open(CHANNELS_FILE, 'r') as f:
-            return json.load(f)
-    return {}
-
-def save_channels(channels):
-    with open(CHANNELS_FILE, 'w') as f:
-        json.dump(channels, f)
+bot = commands.Bot(command_prefix='!', intents=intents)
 
 def load_last():
     if os.path.exists(LAST_NEWS_FILE):
@@ -49,8 +52,6 @@ def save_last(last_times):
 
 @bot.event
 async def on_ready():
-    global CHANNELS
-    CHANNELS = load_channels()
     fetch_news.start()
     print(f'{bot.user} has connected to Discord!')
 
@@ -60,7 +61,7 @@ async def fetch_news():
     async with aiohttp.ClientSession() as session:
         async with session.get(url) as resp:
             if resp.status != 200:
-                print(f'Error fetching news: {resp.status}')
+                print(f'Error fetching news: {resp.status} - {await resp.text()}')
                 return
             data = await resp.json()
             articles = data.get('articles', [])
@@ -73,7 +74,7 @@ async def fetch_news():
         try:
             pub_time = datetime.fromisoformat(pub_time_str.replace('Z', '+00:00'))
         except ValueError:
-            continue  # Skip invalid dates
+            continue
         
         text = ((article.get('title', '') + ' ' + article.get('description', '') + ' ' + article.get('content', ''))).lower()
         
@@ -89,25 +90,29 @@ async def fetch_news():
                 last_time = datetime(2000, 1, 1, tzinfo=datetime.now().tzinfo)
             
             if pub_time > last_time:
-                if cat in CHANNELS:
-                    channel = bot.get_channel(CHANNELS[cat])
+                channel_id = CHANNEL_IDS.get(cat)
+                if channel_id:
+                    channel = bot.get_channel(channel_id)
                     if channel:
-                        embed = discord.Embed(title=article.get('title', 'No Title'), description=article.get('description', 'No Description'), url=article.get('url'))
+                        embed = discord.Embed(
+                            title=article.get('title', 'No Title'),
+                            description=article.get('description', 'No Description'),
+                            url=article.get('url'),
+                            color=discord.Color.blue()
+                        )
                         embed.set_author(name=article['source'].get('name', 'Unknown Source'))
                         embed.set_footer(text=pub_time_str)
                         await channel.send(embed=embed)
+                    else:
+                        print(f"Channel {channel_id} not found for category {cat}")
                 new_last[cat] = max(new_last.get(cat, '2000-01-01T00:00:00Z'), pub_time_str)
     
     save_last(new_last)
 
-@bot.command()
-@commands.has_permissions(administrator=True)
-async def setchannel(ctx, category: str, channel: discord.TextChannel):
-    if category not in CATEGORIES:
-        await ctx.send(f'Catégorie "{category}" non trouvée. Disponibles : {", ".join(CATEGORIES)}')
+@bot.event
+async def on_command_error(ctx, error):
+    if isinstance(error, commands.CommandNotFound):
         return
-    CHANNELS[category] = channel.id
-    save_channels(CHANNELS)
-    await ctx.send(f'Catégorie "{category}" définie sur {channel.mention}')
+    print(f"Command error: {error}")
 
 bot.run(TOKEN)
