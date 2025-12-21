@@ -19,7 +19,7 @@ CHANNEL_IDS = {
     'etf': 1452340158140649757,
     'Actions': 1452340198535991516,
     'MatierePremiere': 1452340245680095414,
-    'tous le reste': 1452340245680095414  # Par défaut, on peut utiliser le même que MatierePremiere ou un autre
+    'tous le reste': 1452365741579042956  # Par défaut, on peut utiliser le même que MatierePremiere ou un autre
 }
 
 CATEGORIES = list(CHANNEL_IDS.keys())
