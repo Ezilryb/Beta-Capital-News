@@ -57,7 +57,7 @@ async def on_ready():
 
 @tasks.loop(minutes=10)
 async def fetch_news():
-    url = f'https://newsapi.org/v2/everything?q=economy OR finance OR business OR stock OR crypto OR commodity OR etf OR regulation OR hack&domains=coindesk.com,cointelegraph.com,wsj.com,cnbc.com,bloomberg.com,reuters.com&sortBy=publishedAt&apiKey={NEWSAPI_KEY}&pageSize=20&language=en'
+    url = f'https://newsapi.org/v2/everything?q=economy OR finance OR business OR stock OR crypto OR commodity OR etf OR regulation OR hack&domains=coindesk.com,cointelegraph.com,wsj.com,cnbc.com,bloomberg.com,reuters.com&sortBy=publishedAt&apiKey={NEWSAPI_KEY}&pageSize=20&language=fr'
     async with aiohttp.ClientSession() as session:
         async with session.get(url) as resp:
             if resp.status != 200:
