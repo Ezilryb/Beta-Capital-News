@@ -63,9 +63,9 @@ async def on_ready():
 
 @tasks.loop(minutes=10)
 async def fetch_news():
-    # Ajout de termes français dans la requête pour mieux cibler les articles en français
-    # Ajout de domaines français pour obtenir plus de contenu en français
-    url = f'https://newsapi.org/v2/everything?q=(economy OR finance OR business OR stock OR crypto OR commodity OR etf OR regulation OR hack OR économie OR finances OR affaires OR bourse OR cryptomonnaie OR matière première OR régulation OR piratage)&domains=coindesk.com,cointelegraph.com,wsj.com,cnbc.com,bloomberg.com,reuters.com,lesechos.fr,lemonde.fr,france24.com,boursorama.com,bfmtv.com,latribune.fr,capital.fr&sortBy=publishedAt&apiKey={NEWSAPI_KEY}&pageSize=20&language=fr'
+    # Retiré les domaines généraux comme bfmtv.com, lemonde.fr, france24.com pour éviter les articles non pertinents (sports, politique, etc.)
+    # Gardé uniquement les domaines axés sur la finance et l'économie
+    url = f'https://newsapi.org/v2/everything?q=(economy OR finance OR business OR stock OR crypto OR commodity OR etf OR regulation OR hack OR économie OR finances OR affaires OR bourse OR cryptomonnaie OR matière première OR régulation OR piratage)&domains=coindesk.com,cointelegraph.com,wsj.com,cnbc.com,bloomberg.com,reuters.com,lesechos.fr,boursorama.com,latribune.fr,capital.fr&sortBy=publishedAt&apiKey={NEWSAPI_KEY}&pageSize=20&language=fr'
     async with aiohttp.ClientSession() as session:
         async with session.get(url) as resp:
             if resp.status != 200:
@@ -88,7 +88,7 @@ async def fetch_news():
         
         matching_cats = [cat for cat, kws in KEYWORDS.items() if any(kw.lower() in text for kw in kws)]
         if not matching_cats:
-            matching_cats = ['tous le reste']
+            continue  # Ne poste pas les articles qui ne correspondent à aucune catégorie spécifique pour éviter le bruit
         
         for cat in matching_cats:
             last_time_str = last_times.get(cat, '2000-01-01T00:00:00Z')
