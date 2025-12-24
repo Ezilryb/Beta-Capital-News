@@ -25,12 +25,18 @@ CHANNEL_IDS = {
 CATEGORIES = list(CHANNEL_IDS.keys())
 
 KEYWORDS = {
-    'CryptoNFTs': ['crypto', 'bitcoin', 'ethereum', 'nft', 'blockchain', 'defi', 'hack', 'regulation', 'launch'],
-    'devise': ['forex', 'currency', 'exchange rate', 'usd', 'eur', 'yen', 'gbp'],
-    'Indice': ['index', 's&p', 'nasdaq', 'dow jones', 'ftse', 'nikkei'],
-    'etf': ['etf', 'exchange traded fund'],
-    'Actions': ['stock', 'share', 'equity', 'ipo', 'earnings', 'dividend'],
-    'MatierePremiere': ['commodity', 'oil', 'gold', 'silver', 'crude', 'wheat', 'copper']
+    'CryptoNFTs': ['crypto', 'bitcoin', 'ethereum', 'nft', 'blockchain', 'defi', 'hack', 'regulation', 'launch',
+                   'cryptomonnaie', 'bitcoins', 'ethéréum', 'nft', 'blockchain', 'defi', 'piratage', 'régulation', 'lancement'],
+    'devise': ['forex', 'currency', 'exchange rate', 'usd', 'eur', 'yen', 'gbp',
+               'forex', 'devise', 'taux de change', 'dollar', 'euro', 'yen', 'livre sterling'],
+    'Indice': ['index', 's&p', 'nasdaq', 'dow jones', 'ftse', 'nikkei',
+               'indice', 'cac 40', 's&p', 'nasdaq', 'dow jones', 'ftse', 'nikkei'],
+    'etf': ['etf', 'exchange traded fund',
+            'etf', 'fonds négocié en bourse', 'fonds indiciel coté'],
+    'Actions': ['stock', 'share', 'equity', 'ipo', 'earnings', 'dividend',
+                'action', 'bourse', 'équité', 'introduction en bourse', 'résultats', 'bénéfices', 'dividende'],
+    'MatierePremiere': ['commodity', 'oil', 'gold', 'silver', 'crude', 'wheat', 'copper',
+                        'matière première', 'pétrole', 'or', 'argent', 'brut', 'blé', 'cuivre']
 }
 
 LAST_NEWS_FILE = 'last_news.json'
@@ -57,7 +63,9 @@ async def on_ready():
 
 @tasks.loop(minutes=10)
 async def fetch_news():
-    url = f'https://newsapi.org/v2/everything?q=economy OR finance OR business OR stock OR crypto OR commodity OR etf OR regulation OR hack&domains=coindesk.com,cointelegraph.com,wsj.com,cnbc.com,bloomberg.com,reuters.com&sortBy=publishedAt&apiKey={NEWSAPI_KEY}&pageSize=20&language=fr'
+    # Ajout de termes français dans la requête pour mieux cibler les articles en français
+    # Ajout de domaines français pour obtenir plus de contenu en français
+    url = f'https://newsapi.org/v2/everything?q=(economy OR finance OR business OR stock OR crypto OR commodity OR etf OR regulation OR hack OR économie OR finances OR affaires OR bourse OR cryptomonnaie OR matière première OR régulation OR piratage)&domains=coindesk.com,cointelegraph.com,wsj.com,cnbc.com,bloomberg.com,reuters.com,lesechos.fr,lemonde.fr,france24.com,boursorama.com,bfmtv.com,latribune.fr,capital.fr&sortBy=publishedAt&apiKey={NEWSAPI_KEY}&pageSize=20&language=fr'
     async with aiohttp.ClientSession() as session:
         async with session.get(url) as resp:
             if resp.status != 200:
