@@ -26,15 +26,15 @@ CATEGORIES = list(CHANNEL_IDS.keys())
 
 KEYWORDS = {
     'CryptoNFTs': ['crypto', 'bitcoin', 'ethereum', 'nft', 'blockchain', 'defi', 'hack', 'regulation', 'launch',
-                   'cryptomonnaie', 'bitcoins', 'ethéréum', 'nft', 'blockchain', 'defi', 'piratage', 'régulation', 'lancement'],
+                   'cryptomonnaie', 'bitcoins', 'ethéréum', 'nft', 'blockchain', 'defi', 'régulation', 'lancement'],
     'devise': ['forex', 'currency', 'exchange rate', 'usd', 'eur', 'yen', 'gbp',
                'forex', 'devise', 'taux de change', 'dollar', 'euro', 'yen', 'livre sterling'],
     'Indice': ['index', 's&p', 'nasdaq', 'dow jones', 'ftse', 'nikkei',
                'indice', 'cac 40', 's&p', 'nasdaq', 'dow jones', 'ftse', 'nikkei'],
     'etf': ['etf', 'exchange traded fund',
             'etf', 'fonds négocié en bourse', 'fonds indiciel coté'],
-    'Actions': ['stock', 'share', 'equity', 'ipo', 'earnings', 'dividend',
-                'action', 'bourse', 'équité', 'introduction en bourse', 'résultats', 'bénéfices', 'dividende'],
+    'Actions': ['stock', 'share', 'ipo', 'earnings', 'dividend',
+                'action', 'bourse', 'introduction en bourse', 'résultats', 'bénéfices', 'dividende'],
     'MatierePremiere': ['commodity', 'oil', 'gold', 'silver', 'crude', 'wheat', 'copper',
                         'matière première', 'pétrole', 'or', 'argent', 'brut', 'blé', 'cuivre']
 }
