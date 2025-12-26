@@ -24,20 +24,30 @@ CHANNEL_IDS = {
 
 CATEGORIES = list(CHANNEL_IDS.keys())
 
+# Ordre de priorité des catégories pour assigner un article à une seule catégorie en cas de matchs multiples
+CATEGORY_ORDER = ['CryptoNFTs', 'devise', 'Indice', 'etf', 'Actions', 'MatierePremiere']
+
 KEYWORDS = {
     'CryptoNFTs': ['crypto', 'bitcoin', 'ethereum', 'nft', 'blockchain', 'defi', 'hack', 'regulation', 'launch',
-                   'cryptomonnaie', 'bitcoins', 'ethéréum', 'nft', 'blockchain', 'defi', 'régulation', 'lancement'],
+                   'cryptomonnaie', 'bitcoins', 'ethéréum', 'nft', 'blockchain', 'defi', 'piratage', 'régulation', 'lancement'],
     'devise': ['forex', 'currency', 'exchange rate', 'usd', 'eur', 'yen', 'gbp',
                'forex', 'devise', 'taux de change', 'dollar', 'euro', 'yen', 'livre sterling'],
     'Indice': ['index', 's&p', 'nasdaq', 'dow jones', 'ftse', 'nikkei',
                'indice', 'cac 40', 's&p', 'nasdaq', 'dow jones', 'ftse', 'nikkei'],
     'etf': ['etf', 'exchange traded fund',
             'etf', 'fonds négocié en bourse', 'fonds indiciel coté'],
-    'Actions': ['stock', 'share', 'ipo', 'earnings', 'dividend',
-                'action', 'bourse', 'introduction en bourse', 'résultats', 'bénéfices', 'dividende'],
+    'Actions': ['stock', 'share', 'equity', 'ipo', 'earnings', 'dividend',
+                'action', 'bourse', 'équité', 'introduction en bourse', 'résultats', 'bénéfices', 'dividende'],
     'MatierePremiere': ['commodity', 'oil', 'gold', 'silver', 'crude', 'wheat', 'copper',
-                        'matière première', 'pétrole', 'or', 'argent', 'brut', 'blé', 'cuivre']
+                        'matière première', 'pétrole', 'or précieux', 'prix or', 'argent métal', 'prix argent', 'pétrole brut', 'blé', 'cuivre']
 }
+
+# Termes obligatoires pour filtrer les articles non pertinents (doit contenir au moins un de ces termes pour être considéré financier/économique)
+FINANCE_TERMS = [
+    'economy', 'économie', 'finance', 'finances', 'business', 'affaires', 'stock', 'action', 'bourse',
+    'crypto', 'cryptomonnaie', 'commodity', 'matière première', 'etf', 'regulation', 'régulation',
+    'hack', 'piratage', 'market', 'marché', 'investment', 'investissement', 'trading', 'trade'
+]
 
 LAST_NEWS_FILE = 'last_news.json'
 
@@ -63,8 +73,7 @@ async def on_ready():
 
 @tasks.loop(minutes=10)
 async def fetch_news():
-    # Retiré les domaines généraux comme bfmtv.com, lemonde.fr, france24.com pour éviter les articles non pertinents (sports, politique, etc.)
-    # Gardé uniquement les domaines axés sur la finance et l'économie
+    # Domaines limités aux sources financières pour éviter les articles hors sujet
     url = f'https://newsapi.org/v2/everything?q=(economy OR finance OR business OR stock OR crypto OR commodity OR etf OR regulation OR hack OR économie OR finances OR affaires OR bourse OR cryptomonnaie OR matière première OR régulation OR piratage)&domains=coindesk.com,cointelegraph.com,wsj.com,cnbc.com,bloomberg.com,reuters.com,lesechos.fr,boursorama.com,latribune.fr,capital.fr&sortBy=publishedAt&apiKey={NEWSAPI_KEY}&pageSize=20&language=fr'
     async with aiohttp.ClientSession() as session:
         async with session.get(url) as resp:
@@ -77,6 +86,8 @@ async def fetch_news():
     last_times = load_last()
     new_last = last_times.copy()
     
+    posted_urls = set()  # Pour éviter les doublons si un article est assigné multiple fois (bien que maintenant on assigne à une seule cat)
+    
     for article in articles:
         pub_time_str = article['publishedAt']
         try:
@@ -84,36 +95,44 @@ async def fetch_news():
         except ValueError:
             continue
         
-        text = ((article.get('title', '') + ' ' + article.get('description', '') + ' ' + article.get('content', ''))).lower()
+        text = (article.get('title', '') + ' ' + article.get('description', '') + ' ' + article.get('content', '')).lower()
+        
+        # Filtre obligatoire : l'article doit contenir au moins un terme financier
+        if not any(term.lower() in text for term in FINANCE_TERMS):
+            continue
         
         matching_cats = [cat for cat, kws in KEYWORDS.items() if any(kw.lower() in text for kw in kws)]
         if not matching_cats:
-            continue  # Ne poste pas les articles qui ne correspondent à aucune catégorie spécifique pour éviter le bruit
+            continue
         
-        for cat in matching_cats:
-            last_time_str = last_times.get(cat, '2000-01-01T00:00:00Z')
-            try:
-                last_time = datetime.fromisoformat(last_time_str.replace('Z', '+00:00'))
-            except ValueError:
-                last_time = datetime(2000, 1, 1, tzinfo=datetime.now().tzinfo)
-            
-            if pub_time > last_time:
-                channel_id = CHANNEL_IDS.get(cat)
-                if channel_id:
-                    channel = bot.get_channel(channel_id)
-                    if channel:
-                        embed = discord.Embed(
-                            title=article.get('title', 'No Title'),
-                            description=article.get('description', 'No Description'),
-                            url=article.get('url'),
-                            color=discord.Color.blue()
-                        )
-                        embed.set_author(name=article['source'].get('name', 'Unknown Source'))
-                        embed.set_footer(text=pub_time_str)
-                        await channel.send(embed=embed)
-                    else:
-                        print(f"Channel {channel_id} not found for category {cat}")
-                new_last[cat] = max(new_last.get(cat, '2000-01-01T00:00:00Z'), pub_time_str)
+        # Sélectionner une seule catégorie : la plus prioritaire selon CATEGORY_ORDER
+        matching_cats.sort(key=lambda c: CATEGORY_ORDER.index(c) if c in CATEGORY_ORDER else len(CATEGORY_ORDER))
+        selected_cat = matching_cats[0]
+        
+        last_time_str = last_times.get(selected_cat, '2000-01-01T00:00:00Z')
+        try:
+            last_time = datetime.fromisoformat(last_time_str.replace('Z', '+00:00'))
+        except ValueError:
+            last_time = datetime(2000, 1, 1, tzinfo=datetime.now().tzinfo)
+        
+        if pub_time > last_time and article['url'] not in posted_urls:
+            channel_id = CHANNEL_IDS.get(selected_cat)
+            if channel_id:
+                channel = bot.get_channel(channel_id)
+                if channel:
+                    embed = discord.Embed(
+                        title=article.get('title', 'No Title'),
+                        description=article.get('description', 'No Description'),
+                        url=article.get('url'),
+                        color=discord.Color.blue()
+                    )
+                    embed.set_author(name=article['source'].get('name', 'Unknown Source'))
+                    embed.set_footer(text=pub_time_str)
+                    await channel.send(embed=embed)
+                    posted_urls.add(article['url'])
+                else:
+                    print(f"Channel {channel_id} not found for category {selected_cat}")
+            new_last[selected_cat] = max(new_last.get(selected_cat, '2000-01-01T00:00:00Z'), pub_time_str)
     
     save_last(new_last)
 
